@@ -1,5 +1,7 @@
 from botasaurus.browser import browser, Driver
 import time
+import requests
+
 
 class TradingViewParser:
     def __init__(self, driver: Driver):
@@ -34,35 +36,38 @@ class TradingViewParser:
     
     # Получить все тикеры в TradingView
     def get_all_tickers(self):
-        self.driver.click("button[data-name='add-symbol-button']")
-        filters = self.driver.select_all("button[data-qa-id='ss-filter-select-button']")
+        url = "https://symbol-search.tradingview.com/symbol_search/v3/"
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://www.tradingview.com/",
+            "Origin": "https://www.tradingview.com"
+        }
+        params = {
+            "text": "",
+            "exchange": "BYBIT",
+            "search_type": "crypto_swap",
+            "start": 0
+        }
 
-        if filters[0].text != "Bybit":
-            filters[0].click()
-            self.driver.type(".input-qm7Rg5MB", "Bybit")
-            self.driver.select(".wrap-IxKZEhmO").click()
-
-        if filters[1].text != "Своп":
-            filters[1].click()
-            self.driver.click("div[aria-label='Своп']")
-        
-        # Сбор тикеров
-        prev_height = 0
+        start = 0
 
         while True:
-            self.driver.select(".scrollContainer-dlewR1s1").scroll_to_bottom()
+            params["start"] = start
+            r = requests.get(url, params=params, headers=headers)
+            data = r.json()
 
-            height = self.driver.select(".listContainer-dlewR1s1").get_bounding_rect()["height"]
-            if height == prev_height:
+            symbols = [item["symbol"] for item in data["symbols"]]
+
+            valid_symbols = [s for s in symbols if s.endswith("USDT.P")]
+            self.all_tickers.extend(valid_symbols)
+
+            if all(not s.endswith("USDT.P") for s in symbols[-5:]):
                 break
+            
+            start += len(symbols)
 
-            prev_height = height
+            time.sleep(0.4)
         
-        self.all_tickers = self.driver.select_all(".description-oRSs8UQo")
-        self.all_tickers = [t.text for t in self.all_tickers if t.text.endswith("USDT.P")]
-
-        self.driver.click("button[data-qa-id='close']")
-
     # Добавить тикеры в список
     def add_tickers_to_list(self, tickers):
         self.driver.click("button[data-name='watchlists-button']")
