@@ -16,6 +16,39 @@ class TradingViewCorrs:
         self.driver.get("https://ru.tradingview.com/chart/RRGuoDgP")
         self.cookies = self.driver.get_cookies_dict()
 
+    # Добавить тикеры в список
+    def add_tickers_to_list(self, tickers):
+
+        watchlist_get_url = "https://ru.tradingview.com/api/v1/symbols_list/colored/red?source=web"
+        watchlist_add_url = "https://ru.tradingview.com/api/v1/symbols_list/colored/red/append/?source=web"
+        watchlist_remove_url = "https://ru.tradingview.com/api/v1/symbols_list/colored/red/remove/?source=web"
+
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0",
+            "Origin": "https://ru.tradingview.com",
+            "Referer": "https://ru.tradingview.com/chart/RRGuoDgP"
+        }
+
+        cookies = self.driver.get_cookies_dict()
+
+        symbols_data = [f"BYBIT:{tikcer}" for tikcer in tickers]
+
+        watchlist_get_response = requests.get(url=watchlist_get_url, headers=headers, cookies=cookies)
+        watchlist_get_response.raise_for_status()
+
+        watchlist = watchlist_get_response.json()["symbols"]
+        if watchlist:
+            watchlist_remove_response = requests.post(url=watchlist_remove_url, headers=headers, 
+                                                      cookies=cookies, json=watchlist)
+            watchlist_remove_response.raise_for_status()
+
+        watchlist_add_response = requests.post(url=watchlist_add_url, headers=headers, 
+                                               cookies=cookies, json=symbols_data)
+        watchlist_add_response.raise_for_status()
+
+        self.driver.reload()
+
     # Добавить индикатор корреляции
     def activate_corr_indicator(self):
         self.driver.enable_human_mode()
