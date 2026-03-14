@@ -1,17 +1,20 @@
 from botasaurus.browser import browser, Driver
 import time
 import requests
+import json
 
 
 class TradingViewParser:
     def __init__(self, driver: Driver):
         self.driver = driver
+        self.cookies = {}
         self.all_tickers = []
         self.tickers_correlations = {}
 
     # Открыть TradingView
     def open_tradingview(self):
         self.driver.get("https://ru.tradingview.com/chart/RRGuoDgP")
+        self.cookies = self.driver.get_cookies_dict()
 
     # Добавить индикатор корреляции
     def activate_corr_indicator(self):
@@ -37,37 +40,25 @@ class TradingViewParser:
     # Получить все тикеры в TradingView
     def get_all_tickers(self):
 
-        url = "https://symbol-search.tradingview.com/symbol_search/v3/"
+        all_tickers_get_url = "https://scanner.tradingview.com/crypto/scan?label-product=popup-screener-crypto-cex"
+
         headers = {
+            "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0",
-            "Referer": "https://www.tradingview.com/",
-            "Origin": "https://www.tradingview.com"
+            "Origin": "https://www.tradingview.com",
+            "Referer": "https://www.tradingview.com/"
         }
-        params = {
-            "text": "",
-            "exchange": "BYBIT",
-            "search_type": "crypto_swap",
-            "start": 0
-        }
-        start = 0
 
-        while True:
-            params["start"] = start
-            r = requests.get(url, params=params, headers=headers)
-            data = r.json()
+        with open("scanner_payload.json", encoding="utf-8") as f:
+            payload = json.load(f)
 
-            symbols = [item["symbol"] for item in data["symbols"]]
-
-            valid_symbols = [s for s in symbols if s.endswith("USDT.P")]
-            self.all_tickers.extend(valid_symbols)
-
-            if all(not s.endswith("USDT.P") for s in symbols[-5:]):
-                break
-            
-            start += len(symbols)
-
-            time.sleep(0.4)
+        all_tickers_get_response = requests.post(url=all_tickers_get_url, headers=headers, 
+                                                 cookies=self.cookies, json=payload)
+        all_tickers_get_response.raise_for_status()
+        data_response = all_tickers_get_response.json()
         
+        self.all_tickers = [item["s"] for item in data_response["data"]]
+
     # Добавить тикеры в список
     def add_tickers_to_list(self, tickers):
 
@@ -82,21 +73,19 @@ class TradingViewParser:
             "Referer": "https://ru.tradingview.com/chart/RRGuoDgP"
         }
 
-        cookies = self.driver.get_cookies_dict()
-
         symbols_data = [f"BYBIT:{tikcer}" for tikcer in tickers]
 
-        watchlist_get_response = requests.get(url=watchlist_get_url, headers=headers, cookies=cookies)
+        watchlist_get_response = requests.get(url=watchlist_get_url, headers=headers, cookies=self.cookies)
         watchlist_get_response.raise_for_status()
 
         watchlist = watchlist_get_response.json()["symbols"]
         if watchlist:
             watchlist_remove_response = requests.post(url=watchlist_remove_url, headers=headers, 
-                                                      cookies=cookies, json=watchlist)
+                                                      cookies=self.cookies, json=watchlist)
             watchlist_remove_response.raise_for_status()
 
         watchlist_add_response = requests.post(url=watchlist_add_url, headers=headers, 
-                                               cookies=cookies, json=symbols_data)
+                                               cookies=self.cookies, json=symbols_data)
         watchlist_add_response.raise_for_status()
 
         self.driver.reload()

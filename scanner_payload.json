@@ -1,0 +1,73 @@
+{
+    "columns": [
+        "ticker-view",
+        "24h_close_change|5"
+    ],
+    "filter": [
+        {
+            "left": "exchange",
+            "operation": "in_range",
+            "right": [
+                "BYBIT"
+            ]
+        },
+        {
+            "left": "currency_id",
+            "operation": "in_range",
+            "right": [
+                "XTVCUSDT"
+            ]
+        }
+    ],
+    "ignore_unknown_fields": false,
+    "options": {
+        "lang": "ru"
+    },
+    "range": [
+        0,
+        1000
+    ],
+    "sort": {
+        "sortBy": "24h_vol|5",
+        "sortOrder": "desc"
+    },
+    "symbols": {},
+    "markets": [
+        "crypto"
+    ],
+    "filter2": {
+        "operator": "and",
+        "operands": [
+            {
+                "operation": {
+                    "operator": "or",
+                    "operands": [
+                        {
+                            "operation": {
+                                "operator": "and",
+                                "operands": [
+                                    {
+                                        "expression": {
+                                            "left": "typespecs",
+                                            "operation": "has",
+                                            "right": [
+                                                "perpetual"
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "expression": {
+                    "left": "centralization",
+                    "operation": "equal",
+                    "right": "cex"
+                }
+            }
+        ]
+    }
+}
