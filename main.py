@@ -7,6 +7,8 @@ from InquirerPy import inquirer
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import requests
 import json
 
@@ -18,6 +20,16 @@ class TradingViewCorrs:
         self.cookies = {}
         self.all_tickers = []
         self.tickers_correlations = {}
+        self.session = requests.Session()
+        retry = Retry(
+            total=5,                       
+            backoff_factor=1,          
+            status_forcelist=[429,500,502,503,504],
+            allowed_methods=["GET","POST"] 
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
     # -----------------------
     # Открыть TradingView
@@ -26,6 +38,7 @@ class TradingViewCorrs:
         with console.status("[green]Открываем TradingView...[/green]"):
             self.driver.get("https://ru.tradingview.com/chart/RRGuoDgP")
             self.cookies = self.driver.get_cookies_dict()
+            self.session.cookies.update(self.cookies)
         console.print("[bold green]✔ Открыт TradingView[/bold green]")
 
     # -----------------------
@@ -46,17 +59,15 @@ class TradingViewCorrs:
 
         symbols_data = [f"BYBIT:{ticker}" for ticker in tickers]
 
-        watchlist_get_response = requests.get(url=watchlist_get_url, headers=headers, cookies=self.cookies)
+        watchlist_get_response = self.session.get(url=watchlist_get_url, headers=headers)
         watchlist_get_response.raise_for_status()
 
         watchlist = watchlist_get_response.json()["symbols"]
         if watchlist:
-            watchlist_remove_response = requests.post(url=watchlist_remove_url, headers=headers, 
-                                                      cookies=self.cookies, json=watchlist)
+            watchlist_remove_response = self.session.post(url=watchlist_remove_url, headers=headers, json=watchlist)
             watchlist_remove_response.raise_for_status()
 
-        watchlist_add_response = requests.post(url=watchlist_add_url, headers=headers, 
-                                               cookies=self.cookies, json=symbols_data)
+        watchlist_add_response = self.session.post(url=watchlist_add_url, headers=headers, json=symbols_data)
         watchlist_add_response.raise_for_status()
 
     # -----------------------
@@ -102,10 +113,10 @@ class TradingViewCorrs:
             payload = json.load(f)
 
         with console.status("[cyan]Получаем список всех тикеров...[/cyan]", spinner="bouncingBar"):
-            response = requests.post(url=all_tickers_get_url, headers=headers, cookies=self.cookies, json=payload)
+            response = self.session.post(url=all_tickers_get_url, headers=headers, json=payload)
             response.raise_for_status()
             data_response = response.json()
-            self.all_tickers = [item["s"] for item in data_response["data"][:40]]
+            self.all_tickers = [item["s"] for item in data_response["data"]]
         console.print("[bold green]✔ Получены тикеры[/bold green]")
 
     # -----------------------
@@ -131,7 +142,7 @@ class TradingViewCorrs:
                 self.driver.get_element_with_exact_text("Фьючерсы Bybit").click()
 
             total_tickers = len(self.all_tickers)
-            tickers = self.driver.select_all("tbody tr")[:40]
+            tickers = self.driver.select_all("tbody tr")
         console.print("[bold green]✔ Список тикеров готов[/bold green]")
 
         console.print(f"[magenta]Найдено {total_tickers} тикеров...[/magenta]")
@@ -155,7 +166,7 @@ class TradingViewCorrs:
                 progress.update(task, advance=1)
 
                 if i >= len(tickers) - 5:
-                    tickers = self.driver.select_all("tbody tr")[:40]
+                    tickers = self.driver.select_all("tbody tr")
                 
                 if len(self.tickers_correlations) == total_tickers:
                     break
@@ -169,13 +180,14 @@ class TradingViewCorrs:
         ))
         print()
     
-    # -----------------------
+    # =======================
     # Вывод результатов
+    # =======================
+
     # -----------------------
-    def display_results(self):
-        console.print(f"[cyan]{'═'*25}[/cyan] [bold white]Вывод результатов[/bold white] [cyan]{'═'*25}[/cyan]")
-        
-        # --- Настройки ---
+    # Получение настроек 
+    # -----------------------
+    def ask_user_settings(self):
         threshold = inquirer.select(
             message="Выберите порог корреляции:",
             choices=[f"{x/10:.1f}" for x in range(1, 11)],
@@ -195,6 +207,12 @@ class TradingViewCorrs:
             qmark="", amark=""
         ).execute()
 
+        return threshold, sort_order
+
+    # -----------------------
+    # Сортировка корреляций
+    # -----------------------
+    def sort_correlations(self, sort_order):
         if sort_order:
             self.tickers_correlations = dict(
                 sorted(
@@ -204,14 +222,18 @@ class TradingViewCorrs:
                 )
             )
 
+    # -----------------------
+    # Сохранение результатов в файлы
+    # -----------------------
+    def save_results_to_files(self, threshold):
         file_name = f"Корреляция_{datetime.now():%d.%m.%y_%H-%M}"
-
-        # --- Сохранение в txt и excel ---
+        
         with console.status("[green]Сохраняем результаты в файлы...[/green]"):
+            # TXT
             with open(f"{file_name}.txt", "w", encoding="utf-8") as f:
                 for ticker, corr in self.tickers_correlations.items():
                     f.write(f"{ticker}: {corr}\n")
-            
+            # Excel
             wb = Workbook()
             ws = wb.active
             red_fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
@@ -221,7 +243,7 @@ class TradingViewCorrs:
                 cell = ws.cell(row=ws.max_row, column=2)
                 cell.fill = green_fill if corr <= threshold else red_fill
             wb.save(f"{file_name}.xlsx")
-
+        
         console.print(Panel.fit(
             f"🎯 [bold white]Результаты успешно сохранены![/bold white] 🎯\n\n"
             f"[cyan]Файлы:[/cyan]\n"
@@ -229,102 +251,107 @@ class TradingViewCorrs:
             f"• {file_name}.xlsx",
             border_style="bold green"
         ))
-        
-        # --- Таблица ---
+    
+    # -----------------------
+    # Показ таблицы в терминале
+    # -----------------------
+    def show_results_table(self, threshold):
         show_table = inquirer.select(
             message="Показать таблицу корреляций?",
-            choices=[
-                {"name": "Да", "value": True},
-                {"name": "Нет", "value": False},
-            ],
+            choices=[{"name": "Да", "value": True}, {"name": "Нет", "value": False}],
             default=True,
             qmark="", amark=""
         ).execute()
 
-        if show_table:
-            show_all_rows = inquirer.select(
-                message=f"Все или только с корреляцией ниже {threshold}?",
-                choices=[
-                    {"name": f"Ниже {threshold}", "value": False},
-                    {"name": "Все", "value": True},
-                ],
-                default=False,
-                qmark="", amark=""
-            ).execute()
+        if not show_table:
+            return
 
-            if not show_all_rows:
-                data = {
-                    ticker: corr 
-                    for ticker, corr in self.tickers_correlations.items() 
-                    if corr <= threshold
-                }
-            else:
-                data = self.tickers_correlations
+        show_all_rows = inquirer.select(
+            message=f"Все или только с корреляцией ниже {threshold}?",
+            choices=[{"name": f"Ниже {threshold}", "value": False}, {"name": "Все", "value": True}],
+            default=False,
+            qmark="", amark=""
+        ).execute()
 
-            table = Table(title=f"\nКорреляции тикеров ({len(data)})", show_lines=True)
-            table.add_column("Тикер", justify="center", style="cyan", no_wrap=True)
-            table.add_column("Корреляция", justify="center")
-            
-            for ticker, corr in data.items():
-                table.add_row(ticker, f"[green]{corr}[/green]")
+        if not show_all_rows:
+            data = {ticker: corr for ticker, corr in self.tickers_correlations.items() if corr <= threshold}
+        else:
+            data = self.tickers_correlations
 
-            console.print(table)
+        table = Table(title=f"\nКорреляции тикеров ({len(data)})", show_lines=True)
+        table.add_column("Тикер", justify="center", style="cyan", no_wrap=True)
+        table.add_column("Корреляция", justify="center")
+        
+        for ticker, corr in data.items():
+            table.add_row(ticker, f"[green]{corr}[/green]")
 
+        console.print(table)
+
+    # -----------------------
+    # Добавление тикеров с низкой корреляцией в список TradingView
+    # -----------------------
+    def add_low_corr_tickers_to_tradingview(self, threshold):
         add_to_watchlist = inquirer.select(
             message=f"Добавить тикеры с корреляцией ниже {threshold} в список TradingView?",
             choices=[
-                {"name": "Да", "value": True},
-                {"name": "Нет", "value": False},
+                {"name": "Да", "value": True}, 
+                {"name": "Нет", "value": False}
             ],
             default=True,
             qmark="", amark=""
         ).execute()
 
-        if add_to_watchlist:
+        if not add_to_watchlist:
+            return
+
+        low_corr_tickers = [ticker for ticker, corr in self.tickers_correlations.items() if corr <= threshold]
+        console.print(f"[cyan]Найдено {len(low_corr_tickers)} тикеров с корреляцией ниже {threshold}[/cyan]")
+
+        batch_size = 30
+        total = len(low_corr_tickers)
+
+        for i in range(0, total, batch_size):
+            ticker_batch = low_corr_tickers[i:i + batch_size]
+            start = i + 1
+            end = i + len(ticker_batch)
+
+            with console.status(f"[cyan]Добавляем {start}-{end} из {len(low_corr_tickers)} тикеров в список TradingView...[/cyan]", spinner="line"):
+                self.add_tickers_to_list(ticker_batch)
             
-            low_corr_tickers = [
-                ticker 
-                for ticker, corr in self.tickers_correlations.items() 
-                if corr <= threshold
-            ]
-
-            console.print(f"[cyan]Найдено {len(low_corr_tickers)} тикеров с корреляцией ниже {threshold}[/cyan]")
-
-            batch_size = 30
-            total = len(low_corr_tickers)
-
-            for i in range(0, total, batch_size):
-                ticker_batch = low_corr_tickers[i:i + batch_size]
-
-                start = i + 1
-                end = i + len(ticker_batch)
-
-                with console.status(f"[cyan]Добавляем {start}-{end} из {len(low_corr_tickers)} тикеров в список TradingView...[/cyan]", spinner="line"):
-                    self.add_tickers_to_list(ticker_batch)
-                
-                is_last_batch = i + batch_size >= total
-
-                if is_last_batch:
-                    console.print(f"[bold green]Все {total} тикеров были успешно добавлены в список![/bold green]")
-                    break
-                
-                console.print(f"[yellow]Тикеры {start}-{end} добавлены в список.[/yellow]")
-
-                action = inquirer.select(
-                    message="Продолжить добавление следующих тикеров?",
-                    choices=[
-                        {"name": "Продолжить", "value": "continue"},
-                        {"name": "Пропустить оставшиеся", "value": "skip"},
-                    ],
-                    default="continue",
-                    qmark="", amark=""
-                ).execute()
-
-                if action == "skip":
-                    console.print("[red]Добавление тикеров остановлено пользователем[/red]")
-                    break
+            if i + batch_size >= total:
+                console.print(f"[bold green]Все {total} тикеров были успешно добавлены в список![/bold green]")
+                break
             
-            input("\nНажмите Enter для завершения...")
+            console.print(f"[yellow]Тикеры {start}-{end} добавлены в список.[/yellow]")
+
+            action = inquirer.select(
+                message="Продолжить добавление следующих тикеров?",
+                choices=[
+                    {"name": "Продолжить", "value": "continue"}, 
+                    {"name": "Пропустить оставшиеся", "value": "skip"}
+                ],
+                default="continue",
+                qmark="", amark=""
+            ).execute()
+
+            if action == "skip":
+                console.print("[red]Добавление тикеров остановлено пользователем[/red]")
+                break
+
+        input("\nНажмите Enter для завершения...")
+        self.session.close()
+
+    # -----------------------
+    # Основная функция display_results (только оркестрация)
+    # -----------------------
+    def display_results(self):
+        console.print(f"[cyan]{'═'*25}[/cyan] [bold white]Вывод результатов[/bold white] [cyan]{'═'*25}[/cyan]")
+        
+        threshold, sort_order = self.ask_user_settings()
+        self.sort_correlations(sort_order)
+        self.save_results_to_files(threshold)
+        self.show_results_table(threshold)
+        self.add_low_corr_tickers_to_watchlist(threshold)
 
     # -----------------------
     # Pipeline: корреляции
