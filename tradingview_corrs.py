@@ -77,15 +77,16 @@ class TradingViewCorrs:
         with console.status("[yellow]Активируем индикатор корреляции...[/yellow]", spinner="line"):
             self.driver.enable_human_mode()
 
-            indicators = self.driver.select_all(".sources-l31H9iuA .mainTitle-l31H9iuA")
+            selector = ".sources-l31H9iuA .mainTitle-l31H9iuA"
+            indicators = self.driver.select_all(selector)
             corr_exists = False
 
             for indicator in indicators:
                 if indicator.text == "Корреляция":
                     corr_exists = True
                     continue
-
-                self.driver.move_mouse_to_element(indicator)
+                
+                self.driver.move_mouse_to_element(selector)
                 indicator.parent.parent.click("button[data-qa-id='legend-delete-action']")
 
             self.driver.disable_human_mode()
@@ -123,7 +124,7 @@ class TradingViewCorrs:
     # Получить корреляцию тикера
     # -----------------------
     def get_correlation(self):
-        ticker = self.driver.select("[data-qa-id='details-element symbol']").text
+        ticker = self.driver.select(".valueValue-l31H9iuA.apply-common-tooltip").text
         correlation = float(
             self.driver.select(".sources-l31H9iuA .valueValue-l31H9iuA").text.replace(",", ".").replace("−", "-")
         )
