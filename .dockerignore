@@ -1,0 +1,7 @@
+.venv/
+error_logs/
+profiles/
+output/
+__pycache__/
+.git/
+test.txt

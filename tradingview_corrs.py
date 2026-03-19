@@ -13,6 +13,7 @@ from contextlib import redirect_stdout
 from PIL import Image
 import requests
 import json
+import shutil
 import os
 import time
 
@@ -86,6 +87,7 @@ class TradingViewCorrs:
                 elif "CAPTCHA" in problem_elem.text:
                     if self.solve_captcha():
                         self.driver.click("button[data-overflow-tooltip-text='Войти']")
+                        shutil.rmtree("output", ignore_errors=True)
                         time.sleep(1.5)
                     else:
                         self.driver.reload()
@@ -359,9 +361,11 @@ class TradingViewCorrs:
     def save_results_to_files(self, threshold):
         file_name = f"Корреляция_{datetime.now():%d.%m.%y_%H-%M}"
         
+        os.makedirs("results", exist_ok=True)
+
         with console.status("[green]Сохраняем результаты в файлы...[/green]"):
             # TXT
-            with open(f"{file_name}.txt", "w", encoding="utf-8") as f:
+            with open(f"results/{file_name}.txt", "w", encoding="utf-8") as f:
                 for ticker, corr in self.tickers_correlations.items():
                     f.write(f"{ticker}: {corr}\n")
             # Excel
@@ -373,7 +377,7 @@ class TradingViewCorrs:
                 ws.append([ticker, corr])
                 cell = ws.cell(row=ws.max_row, column=2)
                 cell.fill = green_fill if corr <= threshold else red_fill
-            wb.save(f"{file_name}.xlsx")
+            wb.save(f"results/{file_name}.xlsx")
         
         console.print(Panel.fit(
             f"🎯 [bold white]Результаты успешно сохранены![/bold white] 🎯\n\n"
