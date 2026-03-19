@@ -9,8 +9,12 @@ from openpyxl.styles import PatternFill
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from InquirerPy import inquirer
+from contextlib import redirect_stdout
+from PIL import Image
 import requests
 import json
+import os
+import time
 
 console = Console()
 
@@ -35,11 +39,137 @@ class TradingViewCorrs:
     # Открыть TradingView
     # -----------------------
     def open_tradingview(self):
+        """Открывает TradingView"""
         with console.status("[green]Открываем TradingView...[/green]"):
             self.driver.get("https://ru.tradingview.com/chart/RRGuoDgP")
-            self.cookies = self.driver.get_cookies_dict()
-            self.session.cookies.update(self.cookies)
-        console.print("[bold green]✔ Открыт TradingView[/bold green]")
+
+        if self.is_login_required():
+            self.login_tradingview()
+
+        self.cookies = self.driver.get_cookies_dict()
+        self.session.cookies.update(self.cookies)
+
+        console.print("[bold green]✔ TradingView готов к работе[/bold green]")
+
+    def is_login_required(self):
+        """Проверяет, требуется ли авторизация"""
+        login_btn = self.driver.select(".linkButton-dfXNuaqf")
+        return bool(login_btn)
+    
+    def login_tradingview(self):
+        """Авторизация TradingView"""
+        console.print("[bold bright_blue]Авторизация в аккаунт TradingView[/bold bright_blue]")
+
+        while True:
+            self.driver.click(".linkButton-dfXNuaqf")
+            self.driver.click("button[name='Email']")
+
+            username = input("Введите email: ")
+            password = input("Введите пароль: ")
+
+            with console.status("[cyan]Выполняем авторизацию...[/cyan]", spinner="dots"):
+                self.driver.type("#id_username", username)
+                self.driver.type("#id_password", password)
+                self.driver.click("button[data-overflow-tooltip-text='Войти']")
+
+            while True:  
+                problem_elem = self.driver.select(".mainProblem-TCHLKPuQ")
+                        
+                if problem_elem is None:
+                    with console.status("[cyan]Авторизация прошла успешно, загружаем TradingView...[/cyan]", spinner="dots"):
+                        self.driver.reload()
+                    return
+                elif "Неправильное" in problem_elem.text:
+                    console.print("[bright_red]Неверный логин или пароль. Попробуйте снова.[/bright_red]")
+                    self.driver.reload()
+                    break
+                elif "CAPTCHA" in problem_elem.text:
+                    if self.solve_captcha():
+                        self.driver.click("button[data-overflow-tooltip-text='Войти']")
+                        time.sleep(1.5)
+                    else:
+                        self.driver.reload()
+                        break
+
+    def solve_captcha(self):
+        """Обработка reCAPTCHA через пользовательский ввод."""
+        console.print(
+            "[bright_yellow]" \
+            "Вышла капча. Откройте изображение [underline]captcha_image.png[/underline] и введите номера нужных изображений через пробел.\n"
+            "Может быть несколько капчей. В таком случае изображение обновится для повторного ввода номеров.\n"
+            "Пустой ответ - если изображение прорисовано не полностью.\n"
+            "0 - если изображение пустое.\n"
+            "y - подтвердить капчу."
+            "[/bright_yellow]"
+        )
+
+        captcha_frame = self.driver.select_iframe("iframe[title='reCAPTCHA']")
+        captcha_frame.click("#rc-anchor-container")
+        path_image = "output/screenshots/captcha_image.png"
+        is_first_iteration = True
+
+        while True:
+            captcha_images = self.driver.select_iframe("[src*='bframe']").select("#rc-imageselect")
+            self.get_captcha_image(path_image)
+                        
+            if not is_first_iteration:
+                console.print("[bright_yellow]Изображение обновлено[/bright_yellow]")
+            else:
+                is_first_iteration = False
+
+            user_input = input("Введите номера картинок: ")
+
+            if user_input.lower() == "y":
+                captcha_images.click(".rc-button-default")
+                time.sleep(1.5)
+
+                checkbox = captcha_frame.select("#recaptcha-anchor").get_attribute("aria-checked") == "true"
+                if checkbox:
+                    break
+                else:
+                    time.sleep(2)
+                continue
+
+            if user_input == "0":
+                console.print("[bright_yellow]Перезагрузка авторизации...[/bright_yellow]")
+                return False
+            
+            if user_input:
+                self.click_captcha_images(captcha_images, user_input)
+                time.sleep(1)
+                continue
+
+        console.print("[bold green]✔ Капча пройдена[/bold green]")
+        return True
+
+    
+    def get_captcha_image(self, path_image):
+        """Сохраняет скриншот и обрезает его по расположению CAPTCHA."""
+        self.save_screenshot_silent(path_image)
+        rect_captcha = self.driver.select("div:has(iframe[src*='bframe'])").get_bounding_rect()
+        image = Image.open(path_image)
+        cropped = image.crop((
+            rect_captcha["x"],
+            rect_captcha["y"],
+            rect_captcha["x"] + rect_captcha["width"],
+            rect_captcha["y"] + rect_captcha["height"]
+        ))
+        cropped.save(path_image)
+
+    def save_screenshot_silent(self, filename):
+        """Сохраняет скриншот без вывода в терминал"""
+        with open(os.devnull, "w") as f, redirect_stdout(f):
+            self.driver.save_screenshot(filename)
+
+    def click_captcha_images(self, captcha_images, user_input):
+        """Кликает по выбранным картинкам в CAPTCHA."""
+        numbers = user_input.split(" ")
+        try:
+            for number in numbers:
+                captcha_images.click(f"[id='{int(number) - 1}']")
+                time.sleep(0.5)
+        except ValueError:
+            console.print("[red]Неккоректный ввод, попробуйте снова.[/red]")
 
     # -----------------------
     # Добавить тикеры в список

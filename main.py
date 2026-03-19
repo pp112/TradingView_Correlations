@@ -10,4 +10,6 @@ def main(driver, data):
     tv = TradingViewCorrs(driver)
     tv.get_correlations()
 
-main()
+
+if __name__ == "__main__":
+    main()
