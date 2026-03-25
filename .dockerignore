@@ -4,4 +4,5 @@ profiles/
 output/
 __pycache__/
 .git/
-test.txt
+results/
+.gitignore
