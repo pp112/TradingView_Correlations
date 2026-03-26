@@ -56,7 +56,8 @@ class CaptchaSolver:
 
     def _get_captcha_image(self, path_image):
         """Сохраняет скриншот и обрезает его по расположению CAPTCHA."""
-        self._save_screenshot_silent(path_image)
+        filename = "captcha_image"
+        self._save_screenshot_silent(filename)
         rect_captcha = self.driver.select("div:has(iframe[src*='bframe'])").get_bounding_rect()
         image = Image.open(path_image)
         cropped = image.crop((
