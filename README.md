@@ -24,12 +24,18 @@
 
 ## 🚀 Установка и запуск
 
-### 1. Сборка Docker-образа
+### 1. Клонируйте репозиторий
+```bash
+git clone https://github.com/pp112/TradingView_Correlations.git
+cd TradingView_Correlations/
+```
+
+### 2. Сборка Docker-образа
 ```bash
 docker build -t tradingview_corrs .
 ```
 
-### 2. Запуск контейнера
+### 3. Запуск контейнера
 #### Bash (Linux / macOS)
 ```bash
 docker run -it -v "$PWD"/results:/app/results -v "$PWD"/output:/app/output tradingview_corrs
