@@ -36,19 +36,8 @@ docker compose build
 ```
 
 ### 3. Запуск контейнера
-#### Bash (Linux / macOS)
 ```bash
 docker compose run --rm tradingview_corrs
-```
-
-#### Windows (PowerShell)
-```powershell
-docker run -it -v "${PWD}/results:/app/results" -v "${PWD}/output:/app/output" tradingview_corrs
-```
-
-#### Windows (cmd)
-```cmd
-docker run -it -v "%cd%\results:/app/results" -v "%cd%\output:/app/output" tradingview_corrs
 ```
 
 **Примечания:**
