@@ -32,13 +32,13 @@ cd TradingView_Correlations/
 
 ### 2. Сборка Docker-образа
 ```bash
-docker build -t tradingview_corrs .
+docker compose build
 ```
 
 ### 3. Запуск контейнера
 #### Bash (Linux / macOS)
 ```bash
-docker run -it -v "$PWD"/results:/app/results -v "$PWD"/output:/app/output tradingview_corrs
+docker compose run --rm tradingview_corrs
 ```
 
 #### Windows (PowerShell)

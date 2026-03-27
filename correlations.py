@@ -8,12 +8,15 @@ class CorrelationsCollector:
     def run(self, show_ui: bool = True):
         @browser(
             output=None, 
-            profile="TradingviewProfile",
             wait_for_complete_page_load=True,
             window_size=WindowSize.window_size_1920_1080
         )
         def _run_browser(driver: Driver, data):
-            pipeline = Pipeline(driver)
-            return pipeline.run(show_ui)
-        
+            try:
+                pipeline = Pipeline(driver)
+                return pipeline.run(show_ui)
+            except Exception as e:
+                print(f"Ошибка: {e}")
+                return None
+
         return _run_browser()

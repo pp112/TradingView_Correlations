@@ -1,6 +1,8 @@
 from enum import Enum
 import shutil
 import time
+import json
+import os
 
 from botasaurus.browser import Driver
 from rich.console import Console
@@ -22,8 +24,13 @@ class TradingViewBrowser:
     def open_tradingview(self):
         with self.console.status("[green]Открываем TradingView...[/green]"):
             self.driver.get("https://ru.tradingview.com/chart/RRGuoDgP")
+        
+            if self._load_auth_cookies():
+                self.driver.reload()
 
         self._login_tradingview()
+
+        self._save_auth_cookies()
 
         self.console.print("[bold green]✔ TradingView готов к работе[/bold green]")
 
@@ -38,15 +45,16 @@ class TradingViewBrowser:
         self.console.print("[bold bright_blue]Авторизация в аккаунт TradingView[/bold bright_blue]")
 
         username, password = self._get_credentials()
+        self._submit_credentials(username, password)
 
         while True:
-            self._submit_credentials(username, password)
             result = self._handle_auth_problems()
 
             if result == AuthResult.SUCCESS:
                 break
             elif result == AuthResult.INVALID:
                 username, password = self._get_credentials()
+                self._submit_credentials(username, password)
 
     def _get_credentials(self):
         username = input("Введите email: ")
@@ -84,6 +92,19 @@ class TradingViewBrowser:
                 self.console.print("[bright_red]Таймер капчи истек. Пробуем заново...[/bright_red]")
                 self.driver.reload()
             return AuthResult.RETRY
+        
+    def _save_auth_cookies(self, path="cookies/auth_cookies.json"):
+        cookies = self.driver.get_cookies()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cookies, f, indent=4, ensure_ascii=False)
+
+    def _load_auth_cookies(self, path="cookies/auth_cookies.json"):
+        if not os.path.exists(path):
+            return False
+        with open(path, "r", encoding="utf-8") as f:
+            cookies = json.load(f)
+        self.driver.add_cookies(cookies)
+        return True
 
     def activate_corr_indicator(self):
         with self.console.status("[yellow]Активируем индикатор корреляции...[/yellow]", spinner="line"):

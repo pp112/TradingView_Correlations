@@ -1,0 +1,11 @@
+services:
+  tradingview_corrs:
+    build: .
+    image: tradingview_corrs
+    container_name: tradingview_corrs
+    tty: true
+    stdin_open: true
+    volumes:
+      - ./results:/app/results
+      - ./output:/app/output
+      - ./cookies:/app/cookies

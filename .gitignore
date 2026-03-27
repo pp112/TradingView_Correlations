@@ -4,4 +4,4 @@ profiles/
 __pycache__/
 output/
 results/
-tradingview_corrs.py
+cookies/
